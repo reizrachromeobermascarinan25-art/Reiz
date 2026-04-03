@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
 //|                                    ATR_Candle_Breakout_EA.mq5    |
 //|                        ATR Candle Breakout Expert Advisor         |
-//|                        Optimized for XAUUSD (Gold) on MT5        |
+//|                     Optimized for S&P 500 Index on MT5           |
 //+------------------------------------------------------------------+
-#property copyright   "ATR Candle Breakout EA"
+#property copyright   "ATR Candle Breakout EA - SP500"
 #property link        ""
-#property version     "1.00"
+#property version     "2.00"
 #property strict
 
 #include <Trade\Trade.mqh>
@@ -24,15 +24,15 @@ input double          InpCloseZonePercent  = 40.0;         // Close Zone % from 
 //--- Risk Management
 input group "=== Risk Management ==="
 input double InpRiskAmount       = 100.0;   // Fixed Risk Amount (account currency)
-input double InpSLPercent        = 1.5;     // Stop Loss % of open price
-input double InpTPPercent        = 3.0;     // Take Profit % of open price
+input double InpSLPercent        = 0.5;     // Stop Loss % of open price (0.5% for SP500)
+input double InpTPPercent        = 1.0;     // Take Profit % of open price (1:2 RR)
 input int    InpMaxTradesPerDay  = 5;       // Max Trades Per Day
 input double InpMaxDailyLossPct  = 3.0;     // Max Daily Loss % of Balance (pause EA)
 
 //--- Filters
 input group "=== Filters ==="
-input int    InpMaxSpreadPoints  = 50;      // Max Spread (points, 0=disabled)
-input double InpMinATRPoints     = 50.0;    // Min ATR (points, very loose floor)
+input int    InpMaxSpreadPoints  = 30;      // Max Spread (points, 0=disabled)
+input double InpMinATRPoints     = 20.0;    // Min ATR (points, loose floor for SP500)
 input bool   InpUseTrendFilter   = false;   // Enable EMA200 Trend Filter
 input int    InpEMAPeriod        = 200;     // EMA Period (if enabled)
 input bool   InpUseRSIFilter     = false;   // Enable RSI Filter
@@ -42,26 +42,24 @@ input double InpRSIOversold      = 20.0;    // RSI Oversold Level
 
 //--- Session Filter
 input group "=== Session Filter ==="
-input bool InpUseSessionFilter = false;  // Enable Session Filter
-input int  InpAsianStart       = 0;      // Asian Session Start Hour (server time)
-input int  InpAsianEnd         = 8;      // Asian Session End Hour
-input int  InpLondonStart      = 8;      // London Session Start Hour
-input int  InpLondonEnd        = 16;     // London Session End Hour
-input int  InpNewYorkStart     = 13;     // New York Session Start Hour
-input int  InpNewYorkEnd       = 21;     // New York Session End Hour
+input bool InpUseSessionFilter  = false;  // Enable Session Filter
+input bool InpTradePreMarket    = true;   // Allow Pre-Market (server 10:00-14:30)
+input int  InpUSMarketStart     = 14;     // US Market Open Hour (server time ~14:30 UTC)
+input int  InpUSMarketEnd       = 21;     // US Market Close Hour (server time ~21:00 UTC)
+input bool InpTradeAfterHours   = false;  // Allow After-Hours Trading
 
 //--- Trade Management
 input group "=== Trade Management ==="
 input bool   InpUseBreakEven     = true;    // Enable Break-Even
 input bool   InpUseTrailingStop  = false;   // Enable Trailing Stop (trail by 1×ATR)
 input bool   InpCloseEndOfDay    = false;   // Close Trades End-of-Day
-input int    InpEndOfDayHour     = 23;      // End-of-Day Hour (server time)
+input int    InpEndOfDayHour     = 21;      // End-of-Day Hour (21=US market close)
 
 //--- Notifications & Visuals
 input group "=== Notifications & Visuals ==="
 input bool InpPushNotification = false;  // Send Push Notification on Trade
 input bool InpShowDashboard    = true;   // Show On-Chart Dashboard
-input int  InpMagicNumber      = 123456; // EA Magic Number
+input int  InpMagicNumber      = 500500; // EA Magic Number
 
 //+------------------------------------------------------------------+
 //| Global Variables                                                  |
@@ -125,7 +123,7 @@ int OnInit()
    dailyStartBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    dailyResetTime    = GetStartOfDay(TimeCurrent());
 
-   Print("ATR Candle Breakout EA initialized | Symbol: ", _Symbol,
+   Print("ATR Candle Breakout EA (SP500) initialized | Symbol: ", _Symbol,
          " | ATR TF: ", EnumToString(InpATRTimeframe),
          " | Magic: ", InpMagicNumber);
 
@@ -182,7 +180,6 @@ void OnTick()
       return;
    }
 
-   //--- Already have a position from this EA? Allow up to max trades.
    //--- Spread filter
    if(InpMaxSpreadPoints > 0)
    {
@@ -312,7 +309,6 @@ void OnTick()
    }
 
    //--- Calculate trade parameters
-   ENUM_ORDER_TYPE orderType = isBullish ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
    double entryPrice = isBullish ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                                  : SymbolInfoDouble(_Symbol, SYMBOL_BID);
 
@@ -331,7 +327,7 @@ void OnTick()
       tp = entryPrice - tpDistance;
    }
 
-   //--- Normalize prices
+   //--- Normalize prices to tick size
    double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
    if(tickSize > 0)
    {
@@ -361,12 +357,13 @@ void OnTick()
    {
       tradesToday++;
       string direction = isBullish ? "BUY" : "SELL";
+      int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
       Print("Trade opened: ", direction,
             " | Lots: ", DoubleToString(lotSize, 2),
-            " | Entry: ", DoubleToString(entryPrice, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)),
-            " | SL: ", DoubleToString(sl, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)),
-            " | TP: ", DoubleToString(tp, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)),
-            " | ATR: ", DoubleToString(atrValue, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)));
+            " | Entry: ", DoubleToString(entryPrice, digits),
+            " | SL: ", DoubleToString(sl, digits),
+            " | TP: ", DoubleToString(tp, digits),
+            " | ATR: ", DoubleToString(atrValue, digits));
 
       //--- Chart label on signal candle
       CreateSignalLabel(isBullish, atrValue, bodySize, high1, low1);
@@ -445,7 +442,7 @@ bool IsDailyLossLimitHit()
 }
 
 //+------------------------------------------------------------------+
-//| Session filter                                                    |
+//| Session filter — US equity market focused                         |
 //+------------------------------------------------------------------+
 bool IsWithinSession()
 {
@@ -453,35 +450,29 @@ bool IsWithinSession()
    TimeToStruct(TimeCurrent(), dt);
    int hour = dt.hour;
 
-   // Asian session
-   if(InpAsianStart <= InpAsianEnd)
+   //--- Skip weekends (Saturday=6, Sunday=0)
+   if(dt.day_of_week == 0 || dt.day_of_week == 6)
+      return false;
+
+   //--- Pre-market session (typically 10:00-14:30 server/UTC)
+   if(InpTradePreMarket && hour >= 10 && hour < InpUSMarketStart)
+      return true;
+
+   //--- Regular US market hours
+   if(InpUSMarketStart <= InpUSMarketEnd)
    {
-      if(hour >= InpAsianStart && hour < InpAsianEnd) return true;
+      if(hour >= InpUSMarketStart && hour < InpUSMarketEnd)
+         return true;
    }
    else
    {
-      if(hour >= InpAsianStart || hour < InpAsianEnd) return true;
+      if(hour >= InpUSMarketStart || hour < InpUSMarketEnd)
+         return true;
    }
 
-   // London session
-   if(InpLondonStart <= InpLondonEnd)
-   {
-      if(hour >= InpLondonStart && hour < InpLondonEnd) return true;
-   }
-   else
-   {
-      if(hour >= InpLondonStart || hour < InpLondonEnd) return true;
-   }
-
-   // New York session
-   if(InpNewYorkStart <= InpNewYorkEnd)
-   {
-      if(hour >= InpNewYorkStart && hour < InpNewYorkEnd) return true;
-   }
-   else
-   {
-      if(hour >= InpNewYorkStart || hour < InpNewYorkEnd) return true;
-   }
+   //--- After-hours session (typically 21:00-23:00 server/UTC)
+   if(InpTradeAfterHours && hour >= InpUSMarketEnd && hour < 23)
+      return true;
 
    return false;
 }
@@ -517,7 +508,7 @@ double CalculateLotSize(double slDistance)
 
    double lots = InpRiskAmount / lossPerLot;
 
-   // Round to lot step
+   // Round down to lot step
    lots = MathFloor(lots / lotStep) * lotStep;
 
    // Clamp to broker limits
@@ -579,7 +570,8 @@ void ManageOpenTrades()
             if(trailSL > currentSL && trailSL > openPrice)
             {
                if(trade.PositionModify(ticket, trailSL, currentTP))
-                  Print("Trailing stop updated for BUY #", ticket, " | New SL: ", DoubleToString(trailSL, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)));
+                  Print("Trailing stop updated for BUY #", ticket,
+                        " | New SL: ", DoubleToString(trailSL, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)));
             }
          }
       }
@@ -606,7 +598,8 @@ void ManageOpenTrades()
                if(trailSL < openPrice)
                {
                   if(trade.PositionModify(ticket, trailSL, currentTP))
-                     Print("Trailing stop updated for SELL #", ticket, " | New SL: ", DoubleToString(trailSL, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)));
+                     Print("Trailing stop updated for SELL #", ticket,
+                           " | New SL: ", DoubleToString(trailSL, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)));
                }
             }
          }
@@ -678,7 +671,7 @@ void UpdateDashboard()
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
 
    //--- Spread
-   double spread = (double)SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+   long spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
 
    //--- ATR
    double atrVal = 0;
@@ -699,17 +692,18 @@ void UpdateDashboard()
 
    //--- Build dashboard text
    string dash = "";
-   dash += "--- ATR Candle Breakout EA ---\n";
-   dash += StringFormat("Symbol:      %s\n", _Symbol);
-   dash += StringFormat("Spread:      %.0f pts\n", spread);
-   dash += StringFormat("ATR(%d):     %s\n", InpATRPeriod, DoubleToString(atrVal, digits));
-   dash += StringFormat("Daily P&L:   %s\n", DoubleToString(dailyPL, 2));
+   dash += "--- ATR Candle Breakout EA (SP500) ---\n";
+   dash += StringFormat("Symbol:       %s\n", _Symbol);
+   dash += StringFormat("Spread:       %d pts\n", (int)spread);
+   dash += StringFormat("ATR(%d):      %s\n", InpATRPeriod, DoubleToString(atrVal, digits));
+   dash += StringFormat("SL/TP:        %.1f%% / %.1f%%\n", InpSLPercent, InpTPPercent);
+   dash += StringFormat("Daily P&L:    %s\n", DoubleToString(dailyPL, 2));
    dash += StringFormat("Trades Today: %d / %d\n", tradesToday, InpMaxTradesPerDay);
-   dash += StringFormat("Status:      %s\n", status);
+   dash += StringFormat("Status:       %s\n", status);
 
-   if(InpUseTrendFilter)  dash += "EMA Filter:  ON\n";
-   if(InpUseRSIFilter)    dash += "RSI Filter:  ON\n";
-   if(InpUseSessionFilter) dash += "Session Flt: ON\n";
+   if(InpUseTrendFilter)   dash += "EMA Filter:   ON\n";
+   if(InpUseRSIFilter)     dash += "RSI Filter:   ON\n";
+   if(InpUseSessionFilter) dash += "Session Flt:  ON\n";
 
    Comment(dash);
 }
