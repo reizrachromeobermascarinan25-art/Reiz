@@ -186,8 +186,8 @@ void OnTick()
    //--- Spread filter
    if(InpMaxSpreadPoints > 0)
    {
-      double spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
-      if(spread > InpMaxSpreadPoints)
+      long spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+      if(spread > (long)InpMaxSpreadPoints)
       {
          Print("Spread too high: ", spread, " > ", InpMaxSpreadPoints);
          return;
@@ -699,7 +699,7 @@ void UpdateDashboard()
 
    //--- Build dashboard text
    string dash = "";
-   dash += StringFormat("--- ATR Candle Breakout EA ---\n");
+   dash += "--- ATR Candle Breakout EA ---\n";
    dash += StringFormat("Symbol:      %s\n", _Symbol);
    dash += StringFormat("Spread:      %.0f pts\n", spread);
    dash += StringFormat("ATR(%d):     %s\n", InpATRPeriod, DoubleToString(atrVal, digits));
